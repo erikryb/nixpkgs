@@ -7,18 +7,18 @@ let
   configFile = if cfg.networks != {} then pkgs.writeText "wpa_supplicant.conf" ''
     ${optionalString cfg.userControlled.enable ''
       ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=${cfg.userControlled.group}
-      update_config=1''}
-    ${concatStringsSep "\n" (mapAttrsToList (ssid: networkConfig: let
+      update_config=1
+    ''}${concatStringsSep "\n\n" (mapAttrsToList (ssid: networkConfig: let
       psk = if networkConfig.psk != null
         then ''"${networkConfig.psk}"''
         else networkConfig.pskRaw;
     in ''
       network={
         ssid="${ssid}"
-        ${optionalString (psk != null) ''psk=${psk}''}
-        ${optionalString (psk == null) ''key_mgmt=NONE''}
-      }
-    '') cfg.networks)}
+        ${optionalString (psk != null) "psk=${psk}"}
+        ${optionalString (psk == null && ((builtins.hasAttr "key_mgmt" networkConfig.extra) == false)) "key_mgmt=NONE"}
+        ${concatStrings (mapAttrsToList (key: value: "${key}=${value}\n  ") networkConfig.extra)}
+      }'') cfg.networks)}
   '' else "/etc/wpa_supplicant.conf";
 in {
   options = {
@@ -68,6 +68,12 @@ in {
                 Mutually exclusive with <varname>psk</varname>.
               '';
             };
+
+            extra = mkOption {
+              type = types.attrsOf types.str;
+              default = {};
+              description = "Extra options";
+            };
           };
         });
         description = ''
@@ -100,7 +106,6 @@ in {
             settings via wpa_gui or wpa_cli.
           '';
         };
-
         group = mkOption {
           type = types.str;
           default = "wheel";
